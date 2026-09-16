@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>メモ</title>
+<style>
+  :root {
+    --paper: #EDEEEA;
+    --paper-line: #D8D9D2;
+    --ink: #1B3A3A;
+    --ink-soft: #4A5C5C;
+    --accent: #C98A2B;
+    --accent-soft: #E8D9BC;
+    --danger: #A8442F;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #171D1C;
+      --paper-line: #2A332F;
+      --ink: #E7E9E4;
+      --ink-soft: #9BAAA6;
+      --accent: #D9A24B;
+      --accent-soft: #3A3222;
+      --danger: #D9694E;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #171D1C;
+    --paper-line: #2A332F;
+    --ink: #E7E9E4;
+    --ink-soft: #9BAAA6;
+    --accent: #D9A24B;
+    --accent-soft: #3A3222;
+    --danger: #D9694E;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', 'Courier New', monospace;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 48px 20px 80px;
+  }
+
+  main {
+    width: 100%;
+    max-width: 640px;
+  }
+
+  h1 {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 4px;
+    color: var(--ink);
+  }
+
+  .sub {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    margin: 0 0 32px;
+  }
+
+  .composer {
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 16px;
+    margin-bottom: 40px;
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 72px;
+    resize: vertical;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 1rem;
+    line-height: 1.6;
+    padding: 8px 0;
+    outline: none;
+  }
+
+  textarea::placeholder { color: var(--ink-soft); }
+
+  .composer-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 0.85rem;
+    border: none;
+    cursor: pointer;
+    background: none;
+    color: var(--ink-soft);
+    padding: 6px 4px;
+  }
+
+  .save-btn {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 8px 18px;
+  }
+  :root[data-theme="dark"] .save-btn,
+  @media (prefers-color-scheme: dark) { }
+
+  .save-btn:hover { background: var(--accent); color: var(--ink); }
+
+  .empty {
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    padding: 40px 0;
+    text-align: center;
+    border-top: 1px dashed var(--paper-line);
+  }
+
+  .memo {
+    padding: 20px 0;
+    border-bottom: 1px solid var(--paper-line);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .memo-text {
+    white-space: pre-wrap;
+    line-height: 1.7;
+    font-size: 0.98rem;
+  }
+
+  .memo-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .memo-date {
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+  }
+
+  .memo-actions button {
+    margin-left: 12px;
+    font-size: 0.72rem;
+  }
+  .memo-actions button:hover { color: var(--accent); }
+  .memo-actions .del:hover { color: var(--danger); }
+
+  .memo textarea.editing {
+    border-bottom: 1px dashed var(--paper-line);
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>メモ</h1>
+  <p class="sub">ブラウザにだけ保存されます。この端末・このブラウザでのみ表示できます。</p>
+
+  <div class="composer">
+    <textarea id="newMemo" placeholder="いま書き留めたいこと..."></textarea>
+    <div class="composer-row">
+      <button class="save-btn" id="saveBtn">保存する</button>
+    </div>
+  </div>
+
+  <div id="list"></div>
+</main>
+
+<script>
+  const STORAGE_KEY = 'simple-memo-app-notes';
+
+  function loadMemos() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveMemos(memos) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(memos));
+    } catch (e) {
+      console.error('保存に失敗しました', e);
+    }
+  }
+
+  function formatDate(ts) {
+    const d = new Date(ts);
+    const pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  let memos = loadMemos();
+
+  const listEl = document.getElementById('list');
+  const newMemoEl = document.getElementById('newMemo');
+  const saveBtn = document.getElementById('saveBtn');
+
+  function render() {
+    listEl.innerHTML = '';
+
+    if (memos.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      empty.textContent = 'まだメモがありません。上に書いて保存してみましょう。';
+      listEl.appendChild(empty);
+      return;
+    }
+
+    memos.slice().reverse().forEach((memo) => {
+      const item = document.createElement('div');
+      item.className = 'memo';
+
+      const textEl = document.createElement('div');
+      textEl.className = 'memo-text';
+      textEl.textContent = memo.text;
+
+      const metaEl = document.createElement('div');
+      metaEl.className = 'memo-meta';
+
+      const dateEl = document.createElement('span');
+      dateEl.className = 'memo-date';
+      dateEl.textContent = formatDate(memo.updatedAt || memo.createdAt);
+
+      const actionsEl = document.createElement('span');
+      actionsEl.className = 'memo-actions';
+
+      const editBtn = document.createElement('button');
+      editBtn.textContent = '編集';
+      editBtn.addEventListener('click', () => startEdit(memo.id, item, textEl));
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'del';
+      delBtn.textContent = '削除';
+      delBtn.addEventListener('click', () => {
+        memos = memos.filter(m => m.id !== memo.id);
+        saveMemos(memos);
+        render();
+      });
+
+      actionsEl.appendChild(editBtn);
+      actionsEl.appendChild(delBtn);
+
+      metaEl.appendChild(dateEl);
+      metaEl.appendChild(actionsEl);
+
+      item.appendChild(textEl);
+      item.appendChild(metaEl);
+      listEl.appendChild(item);
+    });
+  }
+
+  function startEdit(id, itemEl, textEl) {
+    const memo = memos.find(m => m.id === id);
+    if (!memo) return;
+
+    const editArea = document.createElement('textarea');
+    editArea.className = 'editing';
+    editArea.value = memo.text;
+    editArea.style.width = '100%';
+    editArea.style.minHeight = '60px';
+    editArea.style.fontFamily = 'inherit';
+    editArea.style.fontSize = '0.98rem';
+    editArea.style.background = 'transparent';
+    editArea.style.color = 'inherit';
+    editArea.style.border = 'none';
+    editArea.style.outline = 'none';
+    editArea.style.padding = '0';
+    editArea.style.lineHeight = '1.7';
+
+    itemEl.replaceChild(editArea, textEl);
+    editArea.focus();
+
+    function commit() {
+      const newText = editArea.value.trim();
+      if (newText) {
+        memo.text = newText;
+        memo.updatedAt = Date.now();
+        saveMemos(memos);
+      }
+      render();
+    }
+
+    editArea.addEventListener('blur', commit);
+    editArea.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        editArea.blur();
+      }
+    });
+  }
+
+  function addMemo() {
+    const text = newMemoEl.value.trim();
+    if (!text) return;
+    const now = Date.now();
+    memos.push({ id: `${now}-${Math.random().toString(36).slice(2, 8)}`, text, createdAt: now, updatedAt: now });
+    saveMemos(memos);
+    newMemoEl.value = '';
+    render();
+  }
+
+  saveBtn.addEventListener('click', addMemo);
+  newMemoEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      addMemo();
+    }
+  });
+
+  render();
+</script>
+</body>
+</html>
